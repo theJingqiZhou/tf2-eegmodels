@@ -1,11 +1,9 @@
-import os
+import pathlib
 from typing import Callable, Literal
 
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-
+import keras
 import tensorflow as tf
-import tf_keras as keras
-from tf_keras import activations, backend, constraints, layers
+from keras import activations, backend, constraints, layers
 
 
 def EEGNetV4(
@@ -17,13 +15,14 @@ def EEGNetV4(
     classifier_norm_value: float = 0.25,
     dropout_type: Literal["SpatialDropout2D"] | Literal["Dropout"] = "Dropout",
     dropout_rate: float = 0.5,
-    model_name: str = "eegnetv4",
     include_top: bool = True,
-    input_tensor: tf.Tensor | None = None,
+    weights: str | pathlib.Path | None = None,
+    input_tensor: tf.Tensor | keras.KerasTensor | None = None,
     input_shape: tuple[int, int] | None = None,
     pooling: Literal["avg"] | Literal["max"] | None = None,
     classes: int = 4,
     classifier_activation: str | Callable = "softmax",
+    name: str = "eegnetv4",
 ) -> keras.Model:
     valid_dropouts = {
         "SpatialDropout2D": layers.SpatialDropout2D,
@@ -40,57 +39,75 @@ def EEGNetV4(
     if input_shape is None:
         input_shape = (64, 128)
     if input_tensor is None:
-        input = keras.Input(shape=input_shape)
+        eeg_input = keras.Input(shape=input_shape)
     else:
         if not backend.is_keras_tensor(input_tensor):
-            input = keras.Input(tensor=input_tensor, shape=input_shape)
+            eeg_input = keras.Input(tensor=input_tensor, shape=input_shape)
         else:
-            input = input_tensor
+            eeg_input = input_tensor
 
-    channels, samples = input.shape[-2:]
+    channels, samples = eeg_input.shape[-2:]
 
-    x = layers.Reshape((channels, samples, 1))(input)
+    x = layers.Reshape((channels, samples, 1))(eeg_input)
     x = layers.Conv2D(
-        temporal_filters, (1, srate // 2), padding="same", use_bias=False
+        temporal_filters,
+        (1, srate // 2),
+        padding="same",
+        use_bias=False,
+        name="block1_conv1",
     )(x)
-    x = layers.BatchNormalization()(x)
+    x = layers.BatchNormalization(name="block1_bn1")(x)
     x = layers.DepthwiseConv2D(
         (channels, 1),
         use_bias=False,
         depth_multiplier=spatial_filters,
         depthwise_constraint=constraints.max_norm(1.0),
+        name="block1_conv2",
     )(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ELU()(x)
-    x = layers.AveragePooling2D((1, srate_reduce_steps[0]))(x)
-    x = dropout(dropout_rate)(x)
+    x = layers.BatchNormalization(name="block1_bn2")(x)
+    x = layers.ELU(name="block1_elu")(x)
+    x = layers.AveragePooling2D((1, srate_reduce_steps[0]), name="block1_pool")(x)
+    x = dropout(dropout_rate, name="block1_dropout")(x)
 
     half_second_samples = int(0.5 * (srate // srate_reduce_steps[0]))
     x = layers.SeparableConv2D(
-        pointwise_filters, (1, half_second_samples), use_bias=False, padding="same"
+        pointwise_filters,
+        (1, half_second_samples),
+        use_bias=False,
+        padding="same",
+        name="block2_conv",
     )(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ELU()(x)
-    x = layers.AveragePooling2D((1, srate_reduce_steps[1]))(x)
-    x = dropout(dropout_rate)(x)
+    x = layers.BatchNormalization(name="block2_bn")(x)
+    x = layers.ELU(name="block2_elu")(x)
+    x = layers.AveragePooling2D((1, srate_reduce_steps[1]), name="block2_pool")(x)
+    x = dropout(dropout_rate, name="block2_dropout")(x)
 
     if include_top:
-        x = layers.Flatten()(x)
+        x = layers.Flatten(name="flatten")(x)
 
-        output = layers.Dense(
+        x = layers.Dense(
             classes,
             activation=activations.get(classifier_activation),
             kernel_constraint=constraints.max_norm(classifier_norm_value),
+            name="predictions",
         )(x)
     else:
         if pooling == "avg":
-            x = layers.GlobalAveragePooling2D(name="avg_pool")(x)
+            x = layers.GlobalAveragePooling2D()(x)
         elif pooling == "max":
-            x = layers.GlobalMaxPool2D(name="max_pool")(x)
+            x = layers.GlobalMaxPool2D()(x)
 
-        output = x
+    if input_tensor is not None:
+        inputs = keras.utils.get_source_inputs(input_tensor)
+    else:
+        inputs = eeg_input
 
-    return keras.Model(inputs=input, outputs=output, name=model_name)
+    model = keras.Model(inputs, x, name=name)
+
+    if weights is not None:
+        model.load_weights(weights)
+
+    return model
 
 
 if __name__ == "__main__":

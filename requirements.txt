@@ -1,0 +1,6 @@
+tensorflow>=2.16.2; sys_platform == "linux"
+tensorflow-macos==2.16.2; sys_platform == "darwin"
+keras>3
+
+black
+isort

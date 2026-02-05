@@ -1,5 +1,6 @@
 # Introduction
-This is a fork of the Army Research Laboratory (ARL) EEGModels project: A Collection of Neural Network models for EEG signal processing and classification, written in Keras 2 and Tensorflow. The aim of this project is to
+
+This is a fork of the Army Research Laboratory (ARL) EEGModels project: A Collection of Neural Network models for EEG signal processing and classification, written in Keras 3 and Tensorflow. The aim of this project is still
 
 - provide a set of well-validated models for EEG signal processing and classification
 - facilitate reproducible research and
@@ -7,8 +8,22 @@ This is a fork of the Army Research Laboratory (ARL) EEGModels project: A Collec
 
 # Requirements
 
-- Python == 3.11
-- tensorflow == 2.18.X
+Defaults:
+
+- python >= 3.9, < 3.13
+- tensorflow >= 2.16.2 (Linux)
+- tensorflow-macos == 2.16.2 (Darwin)
+- keras > 3
+
+With [gpu] option:
+
+- Python >= 3.9, < 3.13
+- tensorflow[and-cuda] >= 2.16.2 (Linux)
+- tensorflow-macos == 2.16.2 (Darwin)
+- tensorflow-metal >= 1.1.0 (Darwin)
+- keras > 3
+
+> Code formatter is black, and import fix is done via isort.
 
 # Models Implemented
 
@@ -16,34 +31,71 @@ This is a fork of the Army Research Laboratory (ARL) EEGModels project: A Collec
 - DeepConvNet [[2]](https://onlinelibrary.wiley.com/doi/full/10.1002/hbm.23730)
 - ShallowConvNet [[2]](https://onlinelibrary.wiley.com/doi/full/10.1002/hbm.23730)
 
-
 # Usage
 
-To use this package, place the contents of this folder in your PYTHONPATH environment variable. Then, one can simply import any model and configure it as
-
+To use this package, clone this repository to local and run `pip install <path/to/tf2-eegmodels/clone>`. Then, one can simply import any model and configure it as
 
 ```python
+import keras
+import tensorflow as tf
+from tf2_eegmodels import models as eegmodels
 
-from tf2_eegmodels import models
+srate: int = ...
 
-model  = models.EEGNet(input_shape = ..., classes = ...)
+channels: int = ...
 
-model2 = models.ShallowConvNet(input_shape = ..., classes = ...)
+samples: int = ...
 
-model3 = models.DeepConvNet(input_shape = ..., classes = ...)
+# According to the original paper, the parameters of some layers are defined based on the sampling rate.
+model_eegnet_v4 = eegmodels.EEGNetV4(
+    srate=srate, input_shape=(channels, samples), classes=classes
+)
+# To replace the final softmax activation.
+model_eegnet_v4_out_logits = eegmodels.EEGNetV4(
+    srate=srate,
+    input_shape=(channels, samples),
+    classes=classes,
+    classifier_activation="linear",
+)
 
+# What if we do not want to flat feature map at the top of model?
+model_eegnet_v4_no_top = eegmodels.EEGNetV4(
+    srate=srate, input_shape=(channels, samples), include_top=False
+)
+# How about reduce the final feature map via global pooling?
+model_eegnet_v4_pool_top = eegmodels.EEGNetV4(
+    srate=srate, input_shape=(channels, samples), include_top=False, pooling="avg"
+)
+
+eeg_tensor: tf.Tensor = ...  # In shape (channels, samples).
+
+# We can also use actual tensor to aid model creation.
+model_eegnet = eegmodels.EEGNet(
+    input_tensor=eeg_tensor, input_shape=(channels, samples), classes=classes
+)
+
+eeg_keras_tensor: keras.KerasTensor = keras.Input(shape=(channels, samples))
+
+# And of course a symbolic tensor (KerasTensor).
+model_shallowconvnet = eegmodels.ShallowConvNet(
+    input_tensor=eeg_keras_tensor, classes=classes
+)
+
+weights_path: str | pathlib.Path = ...
+
+# To use pretrained weights.
+model_deepconvnet = eegmodels.DeepConvNet(
+    weights=weights_path, input_shape=(channels, samples), classes=classes
+)
 ```
 
 Compile the model with the associated loss function and optimizer (in our case, the categorical cross-entropy and Adam optimizer, respectively). Then fit the model and predict on new test data.
 
 ```python
-
-model.compile(loss = 'categorical_crossentropy', optimizer = 'adam')
-fittedModel    = model.fit(...)
-predicted      = model.predict(...)
-
+model_eegnet_v4.compile(loss="categorical_crossentropy", optimizer="adam")
+fittedModel = model_eegnet_v4.fit(...)
+predicted = model_eegnet_v4.predict(...)
 ```
-
 
 # Paper Citation
 

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tf2-eegmodels"
+authors = [
+    {name = "Jingqi Zhou", email = "theJingqiZhou@gmail.com"}
+]
+description = "A Collection of Neural Network models for EEG signal classification, using Keras 3 and Tensorflow"
+readme = "README.md"
+requires-python = ">=3.9,<3.13"
+keywords = ["deep-learning", "eeg"]
+license = "CC0-1.0 AND Apache-2.0"
+dependencies = [
+    "tensorflow>=2.16.2; sys_platform == 'linux'",
+    "tensorflow-macos==2.16.2; sys_platform == 'darwin'",
+    "keras>3",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+gpu = [
+    "tensorflow[and-cuda]>=2.16.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "tensorflow-metal>=1.1.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+[tool.setuptools.packages.find]
+where = ["tf2_eegmodels"]
+
+[tool.setuptools_scm]
+fallback_version = "0.1.0"
+
+[tool.black]
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+src_paths = ["tf2_eegmodels"]
